@@ -18,15 +18,15 @@ const FONT: [u8; 80] = [
 ];
 
 pub struct Processor {
-    memory: [u8; 4096], // 4KB of memory.
-    v: [u8; 16],        // 16 8-bit general purpose registers. V0 to VF
-    i: u16,             // 16-bit I register.
-    sound_timer: u8,    // 8-bit sound timer.
-    delay_timer: u8,    // 8-bit delay timer.
-    pc: u16,            // 16-bit program counter.
-    sp: u8,             // 16-bit stack pointer.
-    stack: [u16; 16],   // 16 16-bit value stack.
-    vram: [u32; 64],    // 64x32 pixel monitor.
+    memory: [u8; 4096],   // 4KB of memory.
+    v: [u8; 16],          // 16 8-bit general purpose registers. V0 to VF
+    i: u16,               // 16-bit I register.
+    sound_timer: u8,      // 8-bit sound timer.
+    delay_timer: u8,      // 8-bit delay timer.
+    pc: u16,              // 16-bit program counter.
+    sp: u8,               // 16-bit stack pointer.
+    stack: [u16; 16],     // 16 16-bit value stack.
+    vram: [[u8; 64]; 32], // 64x32 pixel monitor.
 }
 
 impl Processor {
@@ -43,8 +43,12 @@ impl Processor {
             pc: 0x0,
             sp: 0x0,
             stack: [0x0; 16],
-            vram: [0x0; 64],
+            vram: [[0x0; 64]; 32],
         }
+    }
+
+    pub fn load_cartridge(&mut self, cartridge: &[u8; 3584]) {
+        self.memory[0x200..].clone_from_slice(&cartridge[..]);
     }
 
     pub fn cycle(&mut self) {
@@ -122,7 +126,7 @@ fn inst_0nnn(cpu: &mut Processor, addr: u16) {}
 /// 00E0 - CLS
 /// Clear the display.
 fn inst_00E0(cpu: &mut Processor) {
-    cpu.vram = [0x0; 64];
+    cpu.vram = [[0x0; 64]; 32];
 }
 
 /// 00EE - RET
@@ -160,12 +164,17 @@ fn inst_5xy0(cpu: &Processor, x: u8, y: u8) {}
 /// 6xkk - LD Vx, byte
 /// Set Vx = kk.
 /// The interpreter puts the value kk into register Vx.
-fn inst_6xkk(cpu: &Processor, x: u8, kk: u8) {}
+fn inst_6xkk(cpu: &mut Processor, x: u8, kk: u8) {
+    cpu.v[x as usize] = kk;
+}
 
 /// 7xkk - ADD Vx, byte
 /// Set Vx = Vx + kk.
 /// Adds the value kk to the value of register Vx, then stores the result in Vx.
-fn inst_7xkk(cpu: &Processor, x: u8, kk: u8) {}
+fn inst_7xkk(cpu: &mut Processor, x: u8, kk: u8) {
+    let index = x as usize;
+    cpu.v[index] = cpu.v[index] + kk;
+}
 
 /// 8xy0 - LD Vx, Vy
 /// Set Vx = Vy.
@@ -225,12 +234,14 @@ fn inst_9xy0(cpu: &Processor, x: u8, y: u8) {}
 /// Annn - LD I, addr
 /// Set I = nnn.
 /// The value of register I is set to nnn.
-fn inst_Annn(cpu: &Processor, addr: u16) {}
+fn inst_Annn(cpu: &mut Processor, nnn: u16) {
+    cpu.i = nnn;
+}
 
 /// Bnnn - JP V0, addr
 /// Jump to location nnn + V0.
 /// The program counter is set to nnn plus the value of V0.
-fn inst_Bnnn(cpu: &Processor, addr: u16) {}
+fn inst_Bnnn(cpu: &Processor, nnn: u16) {}
 
 /// Cxkk - RND Vx, byte
 /// Set Vx = random byte AND kk.
@@ -245,7 +256,29 @@ fn inst_Cxkk(cpu: &Processor, x: u8, kk: u8) {}
 /// is set to 0. If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side
 /// of the screen. See instruction 8xy3 for more information on XOR, and section 2.4, Display, for more information on the Chip-8 screen
 /// and sprites.
-fn inst_Dxyn(cpu: &Processor, x: u8, y: u8, n: u8) {}
+fn inst_Dxyn(cpu: &mut Processor, x: u8, y: u8, n: u8) {
+    let mut x_cord = (cpu.v[x as usize] % 64) as usize;
+    let mut y_cord = (cpu.v[y as usize] % 32) as usize;
+    cpu.v[0xF] = 0;
+    for i in 0..n {
+        let byte = cpu.memory[(cpu.i + (i as u16)) as usize];
+        for j in 0..8 {
+            let pixel = (byte >> j) & 0x1;
+            cpu.v[0xF] = (pixel & cpu.vram[y_cord][x_cord]) | cpu.v[0xF];
+            cpu.vram[y_cord][x_cord] = cpu.vram[y_cord][x_cord] ^ pixel;
+
+            if x_cord == 63 {
+                break;
+            }
+
+            x_cord += 1;
+        }
+        if y_cord == 31 {
+            break;
+        }
+        y_cord += 1;
+    }
+}
 
 /// Ex9E - SKP Vx
 /// Skip next instruction if key with the value of Vx is pressed.
