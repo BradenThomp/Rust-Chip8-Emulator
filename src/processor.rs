@@ -30,7 +30,7 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn build() -> Processor {
+    pub fn new() -> Processor {
         let mut memory: [u8; 4096] = [0x0; 4096];
         memory[0x50..0xa0].copy_from_slice(&FONT);
 
@@ -40,7 +40,7 @@ impl Processor {
             i: 0x0,
             sound_timer: 0x0,
             delay_timer: 0x0,
-            pc: 0x0,
+            pc: 0x200,
             sp: 0x0,
             stack: [0x0; 16],
             vram: [[0x0; 64]; 32],
@@ -58,13 +58,12 @@ impl Processor {
         self.pc += 2;
 
         // Decode
-        let inst_id = instruction & 0xf000 >> 12;
+        let inst_id = (instruction & 0xf000) >> 12;
         let x: u8 = ((instruction & 0x0f00) >> 8) as u8;
         let y: u8 = ((instruction & 0x00f0) >> 4) as u8;
         let nnn = instruction & 0x0fff;
         let nn: u8 = (instruction & 0x00ff) as u8;
         let n: u8 = (instruction & 0x000f) as u8;
-
         // Execute
         match inst_id {
             0x0 => match nnn {
