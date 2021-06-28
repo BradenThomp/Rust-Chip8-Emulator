@@ -1,3 +1,5 @@
+use rand::Rng;
+
 const FONT: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -144,7 +146,10 @@ fn inst_00E0(cpu: &mut Processor) {
 /// 00EE - RET
 /// Return from a subroutine.
 /// The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
-fn inst_00EE(cpu: &mut Processor) {}
+fn inst_00EE(cpu: &mut Processor) {
+    cpu.pc = cpu.stack[cpu.sp as usize];
+    cpu.sp -= 1;
+}
 
 /// 1nnn - JP addr
 /// Jump to location nnn.
@@ -156,28 +161,49 @@ fn inst_1nnn(cpu: &mut Processor, nnn: u16) {
 /// 2nnn - CALL addr
 /// Call subroutine at nnn.
 /// The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn.
-fn inst_2nnn(cpu: &Processor, addr: u16) {}
+fn inst_2nnn(cpu: &mut Processor, nnn: u16) {
+    cpu.sp += 1;
+    cpu.stack[cpu.sp as usize] = cpu.pc;
+    cpu.pc = nnn;
+}
 
 /// 3xkk - SE Vx, byte
 /// Skip next instruction if Vx = kk.
 /// The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
-fn inst_3xkk(cpu: &Processor, x: u8, kk: u8) {}
+fn inst_3xkk(cpu: &mut Processor, x: u8, kk: u8) {
+    let x = x as usize;
+    if cpu.v[x as usize] == kk {
+        cpu.pc += 2;
+    }
+}
 
 /// 4xkk - SNE Vx, byte
 /// Skip next instruction if Vx != kk.
 /// The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
-fn inst_4xkk(cpu: &Processor, x: u8, kk: u8) {}
+fn inst_4xkk(cpu: &mut Processor, x: u8, kk: u8) {
+    let x = x as usize;
+    if cpu.v[x] != kk {
+        cpu.pc += 2;
+    }
+}
 
 /// 5xy0 - SE Vx, Vy
 /// Skip next instruction if Vx = Vy.
 /// The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
-fn inst_5xy0(cpu: &Processor, x: u8, y: u8) {}
+fn inst_5xy0(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    if cpu.v[x] == cpu.v[y] {
+        cpu.pc += 2;
+    }
+}
 
 /// 6xkk - LD Vx, byte
 /// Set Vx = kk.
 /// The interpreter puts the value kk into register Vx.
 fn inst_6xkk(cpu: &mut Processor, x: u8, kk: u8) {
-    cpu.v[x as usize] = kk;
+    let x = x as usize;
+    cpu.v[x] = kk;
 }
 
 /// 7xkk - ADD Vx, byte
@@ -191,57 +217,103 @@ fn inst_7xkk(cpu: &mut Processor, x: u8, kk: u8) {
 /// 8xy0 - LD Vx, Vy
 /// Set Vx = Vy.
 /// Stores the value of register Vy in register Vx.
-fn inst_8xy0(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy0(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    cpu.v[x] = cpu.v[y];
+}
 
 /// 8xy1 - OR Vx, Vy
 /// Set Vx = Vx OR Vy.
 /// Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx. A bitwise OR compares the corrseponding
 /// bits from two values, and if either bit is 1, then the same bit in the result is also 1. Otherwise, it is 0.
-fn inst_8xy1(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy1(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    cpu.v[x] = cpu.v[x] | cpu.v[y];
+}
 
 /// 8xy2 - AND Vx, Vy
 /// Set Vx = Vx AND Vy.
 /// Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx. A bitwise AND compares the corrseponding
 /// bits from two values, and if both bits are 1, then the same bit in the result is also 1. Otherwise, it is 0.
-fn inst_8xy2(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy2(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    cpu.v[x] = cpu.v[x] & cpu.v[y];
+}
 
 /// 8xy3 - XOR Vx, Vy
 /// Set Vx = Vx XOR Vy.
 /// Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx. An exclusive OR compares the
 /// corrseponding bits from two values, and if the bits are not both the same, then the corresponding bit in the result is set to 1.
 /// Otherwise, it is 0.
-fn inst_8xy3(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy3(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    cpu.v[x] ^= cpu.v[y];
+}
 
 /// 8xy4 - ADD Vx, Vy
 /// Set Vx = Vx + Vy, set VF = carry.
 /// The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0. Only the
 /// lowest 8 bits of the result are kept, and stored in Vx.
-fn inst_8xy4(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy4(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    let result: u16 = (cpu.v[x] + cpu.v[y]) as u16;
+    cpu.v[0xF] = if result > 255 { 1 } else { 0 };
+    cpu.v[x] = result as u8;
+}
 
 /// 8xy5 - SUB Vx, Vy
 /// Set Vx = Vx - Vy, set VF = NOT borrow.
 /// If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
-fn inst_8xy5(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy5(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    cpu.v[0xF] = if cpu.v[x] > cpu.v[y] { 1 } else { 0 };
+    cpu.v[x] -= cpu.v[y];
+}
 
 /// 8xy6 - SHR Vx {, Vy}
 /// Set Vx = Vx SHR 1.
 /// If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
-fn inst_8xy6(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy6(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    cpu.v[0xF] = if (cpu.v[x] & 0x1) == 0x1 { 1 } else { 0 };
+    cpu.v[x] /= 2;
+}
 
 /// 8xy7 - SUBN Vx, Vy
 /// Set Vx = Vy - Vx, set VF = NOT borrow.
 /// If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
-fn inst_8xy7(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xy7(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    cpu.v[0xF] = if cpu.v[x] > cpu.v[y] { 1 } else { 0 };
+    cpu.v[x] = cpu.v[y] - cpu.v[x];
+}
 
 /// 8xyE - SHL Vx {, Vy}
 /// Set Vx = Vx SHL 1.
 /// If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
-fn inst_8xyE(cpu: &Processor, x: u8, y: u8) {}
+fn inst_8xyE(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    cpu.v[0xF] = if (cpu.v[x] & 0x80) == 0x80 { 1 } else { 0 };
+    cpu.v[x] *= 2;
+}
 
 /// 9xy0 - SNE Vx, Vy
 /// Skip next instruction if Vx != Vy.
 /// The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
-fn inst_9xy0(cpu: &Processor, x: u8, y: u8) {}
+fn inst_9xy0(cpu: &mut Processor, x: u8, y: u8) {
+    let x = x as usize;
+    let y = y as usize;
+    if cpu.v[x] != cpu.v[y] {
+        cpu.pc += 2;
+    }
+}
 
 /// Annn - LD I, addr
 /// Set I = nnn.
@@ -253,13 +325,20 @@ fn inst_Annn(cpu: &mut Processor, nnn: u16) {
 /// Bnnn - JP V0, addr
 /// Jump to location nnn + V0.
 /// The program counter is set to nnn plus the value of V0.
-fn inst_Bnnn(cpu: &Processor, nnn: u16) {}
+fn inst_Bnnn(cpu: &mut Processor, nnn: u16) {
+    cpu.pc = nnn + cpu.v[0] as u16;
+}
 
 /// Cxkk - RND Vx, byte
 /// Set Vx = random byte AND kk.
 /// The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. The results are stored in Vx.
 /// See instruction 8xy2 for more information on AND.
-fn inst_Cxkk(cpu: &Processor, x: u8, kk: u8) {}
+fn inst_Cxkk(cpu: &mut Processor, x: u8, kk: u8) {
+    let x = x as usize;
+    let mut rng = rand::thread_rng();
+    let number: u8 = rng.gen();
+    cpu.v[x] = number & kk;
+}
 
 /// Dxyn - DRW Vx, Vy, nibble
 /// Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
@@ -289,56 +368,105 @@ fn inst_Dxyn(cpu: &mut Processor, x: usize, y: usize, n: usize) -> bool {
 /// Ex9E - SKP Vx
 /// Skip next instruction if key with the value of Vx is pressed.
 /// Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
-fn inst_Ex9E(cpu: &Processor, x: u8) {}
+fn inst_Ex9E(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    // TODO
+    //if cpu.[cpu.v[x] as usize] == 0x1 {
+    //    cpu.pc += 2;
+    //}
+}
 
 /// ExA1 - SKNP Vx
 /// Skip next instruction if key with the value of Vx is not pressed.
 /// Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
-fn inst_ExA1(cpu: &Processor, x: u8) {}
+fn inst_ExA1(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    // TODO
+    //if cpu.[cpu.v[x] as usize] != 0x1 {
+    //    cpu.pc += 2;
+    //}
+}
 
 /// Fx07 - LD Vx, DT
 /// Set Vx = delay timer value.
 /// The value of DT is placed into Vx.
-fn inst_Fx07(cpu: &Processor, x: u8) {}
+fn inst_Fx07(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    cpu.v[x] = cpu.delay_timer;
+}
 
 /// Fx0A - LD Vx, K
 /// Wait for a key press, store the value of the key in Vx.
 /// All execution stops until a key is pressed, then the value of that key is stored in Vx.
-fn inst_Fx0A(cpu: &Processor, x: u8) {}
+fn inst_Fx0A(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    // TODO
+    //cpu.v[x] = cpu.delay_timer;
+}
 
 /// Fx15 - LD DT, Vx
 /// Set delay timer = Vx.
 /// DT is set equal to the value of Vx.
-fn inst_Fx15(cpu: &Processor, x: u8) {}
+fn inst_Fx15(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    cpu.delay_timer = cpu.v[x];
+}
 
 /// Fx18 - LD ST, Vx
 /// Set sound timer = Vx.
 /// ST is set equal to the value of Vx.
-fn inst_Fx18(cpu: &Processor, x: u8) {}
+fn inst_Fx18(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    cpu.sound_timer = cpu.v[x];
+}
 
 /// Fx1E - ADD I, Vx
 /// Set I = I + Vx.
 /// The values of I and Vx are added, and the results are stored in I.
-fn inst_Fx1E(cpu: &Processor, x: u8) {}
+fn inst_Fx1E(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    cpu.i += cpu.v[x] as u16;
+}
 
 /// Fx29 - LD F, Vx
 /// Set I = location of sprite for digit Vx.
 /// The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx. See section 2.4, Display, for
 /// more information on the Chip-8 hexadecimal font.
-fn inst_Fx29(cpu: &Processor, x: u8) {}
+fn inst_Fx29(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    cpu.i = cpu.v[x] as u16;
+}
 
 /// Fx33 - LD B, Vx
 /// Store BCD representation of Vx in memory locations I, I+1, and I+2.
 /// The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1,
 /// and the ones digit at location I+2.
-fn inst_Fx33(cpu: &Processor, x: u8) {}
+fn inst_Fx33(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    let address = cpu.i as usize;
+    cpu.memory[address] = cpu.v[x] & 100;
+    cpu.memory[address + 1] = cpu.v[x] & 10;
+    cpu.memory[address + 2] = cpu.v[x] & 1;
+}
 
 /// Fx55 - LD [I], Vx
 /// Store registers V0 through Vx in memory starting at location I.
 /// The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
-fn inst_Fx55(cpu: &Processor, x: u8) {}
+fn inst_Fx55(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    let address = cpu.i as usize;
+    for i in 0..=x {
+        cpu.memory[address + i] = cpu.v[i];
+    }
+}
 
 /// Fx65 - LD Vx, [I]
 /// Read registers V0 through Vx from memory starting at location I.
 /// The interpreter reads values from memory starting at location I into registers V0 through Vx.
-fn inst_Fx65(cpu: &Processor, x: u8) {}
+fn inst_Fx65(cpu: &mut Processor, x: u8) {
+    let x = x as usize;
+    let address = cpu.i as usize;
+    for i in 0..=x {
+        cpu.v[i] = cpu.memory[address + i];
+    }
+}
