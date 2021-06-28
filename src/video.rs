@@ -1,3 +1,4 @@
+use crate::processor::CycleResult;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 
@@ -16,11 +17,15 @@ impl Video {
         let canvas = window.into_canvas().build().unwrap();
         Video { canvas: canvas }
     }
-    pub fn update(&mut self, video_out: &[[u8; 64]; 32]) {
+    pub fn update(&mut self, result: CycleResult) {
+        if !result.video_changed {
+            return;
+        }
+
         self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-        for i in 0..video_out.len() {
-            for j in 0..video_out[i].len() {
-                if video_out[i][j] == 0x1 {
+        for i in 0..result.video_out.len() {
+            for j in 0..result.video_out[i].len() {
+                if result.video_out[i][j] == 0x1 {
                     let x: i32 = (j * 10) as i32;
                     let y: i32 = (i * 10) as i32;
                     self.canvas

@@ -18,15 +18,20 @@ const FONT: [u8; 80] = [
 ];
 
 pub struct Processor {
-    memory: [u8; 4096],       // 4KB of memory.
-    v: [u8; 16],              // 16 8-bit general purpose registers. V0 to VF
-    i: u16,                   // 16-bit I register.
-    sound_timer: u8,          // 8-bit sound timer.
-    delay_timer: u8,          // 8-bit delay timer.
-    pc: u16,                  // 16-bit program counter.
-    sp: u8,                   // 16-bit stack pointer.
-    stack: [u16; 16],         // 16 16-bit value stack.
-    pub vram: [[u8; 64]; 32], // 64x32 pixel monitor.
+    memory: [u8; 4096],   // 4KB of memory.
+    v: [u8; 16],          // 16 8-bit general purpose registers. V0 to VF
+    i: u16,               // 16-bit I register.
+    sound_timer: u8,      // 8-bit sound timer.
+    delay_timer: u8,      // 8-bit delay timer.
+    pc: u16,              // 16-bit program counter.
+    sp: u8,               // 16-bit stack pointer.
+    stack: [u16; 16],     // 16 16-bit value stack.
+    vram: [[u8; 64]; 32], // 64x32 pixel monitor.
+}
+
+pub struct CycleResult {
+    pub video_out: [[u8; 64]; 32], // 64x32 pixel monitor.
+    pub video_changed: bool,
 }
 
 impl Processor {
@@ -51,7 +56,7 @@ impl Processor {
         self.memory[0x200..].clone_from_slice(&cartridge[..]);
     }
 
-    pub fn cycle(&mut self) {
+    pub fn cycle(&mut self) -> CycleResult {
         // Fetch
         let instruction: u16 = (self.memory[self.pc as usize] as u16) << 8
             | self.memory[(self.pc + 1) as usize] as u16;
@@ -64,6 +69,7 @@ impl Processor {
         let nnn = instruction & 0x0fff;
         let nn: u8 = (instruction & 0x00ff) as u8;
         let n: u8 = (instruction & 0x000f) as u8;
+        let mut vram_changed = false;
         // Execute
         match inst_id {
             0x0 => match nnn {
@@ -94,7 +100,9 @@ impl Processor {
             0xA => inst_Annn(self, nnn),
             0xB => inst_Bnnn(self, nnn),
             0xC => inst_Cxkk(self, x, nn),
-            0xD => inst_Dxyn(self, x as usize, y as usize, n as usize),
+            0xD => {
+                vram_changed = inst_Dxyn(self, x as usize, y as usize, n as usize);
+            }
             0xE => match nn {
                 0x9E => inst_Ex9E(self, x),
                 0xA1 => inst_ExA1(self, x),
@@ -114,6 +122,11 @@ impl Processor {
             },
             _ => (),
         }
+
+        return CycleResult {
+            video_out: self.vram,
+            video_changed: vram_changed,
+        };
     }
 }
 
@@ -255,17 +268,22 @@ fn inst_Cxkk(cpu: &Processor, x: u8, kk: u8) {}
 /// is set to 0. If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side
 /// of the screen. See instruction 8xy3 for more information on XOR, and section 2.4, Display, for more information on the Chip-8 screen
 /// and sprites.
-fn inst_Dxyn(cpu: &mut Processor, x: usize, y: usize, n: usize) {
+fn inst_Dxyn(cpu: &mut Processor, x: usize, y: usize, n: usize) -> bool {
     cpu.v[0x0f] = 0;
+    let mut vram_changed = false;
     for i in 0..n {
         let y = (cpu.v[y] as usize + i) % 32;
         for j in 0..8 {
             let x = (cpu.v[x] as usize + j) % 64;
             let bit = (cpu.memory[cpu.i as usize + i as usize] >> (7 - j)) & 0x01;
             cpu.v[0x0f] |= bit & cpu.vram[y][x];
+            let prev_bit = cpu.vram[y][x];
             cpu.vram[y][x] ^= bit;
+            vram_changed = vram_changed || (prev_bit != cpu.vram[y][x]);
         }
     }
+
+    vram_changed
 }
 
 /// Ex9E - SKP Vx

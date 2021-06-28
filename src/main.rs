@@ -36,8 +36,8 @@ fn main() -> Result<(), &'static str> {
             KeyboardInput::Other => (),
         }
         // Emu Display Logic
-        cpu.cycle();
-        video_out.update(&cpu.vram);
+        let result = cpu.cycle();
+        video_out.update(result);
         sleep(Duration::from_nanos(1000));
     }
 
