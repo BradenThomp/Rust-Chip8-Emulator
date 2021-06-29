@@ -1,5 +1,4 @@
 # Rust Chip-8 Emulator
-View a [demo here](https://www.google.com/).
 
 ## About
 This is a Chip8 emulator built in rust. Chip8 is a virtual machine developed developed by Joseph Weisbecker.  You can find out more about Chip8 [Here](https://en.wikipedia.org/wiki/CHIP-8).
