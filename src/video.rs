@@ -21,7 +21,8 @@ impl Video {
         if !result.video_changed {
             return;
         }
-
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
+        self.canvas.clear();
         self.canvas.set_draw_color(Color::RGB(255, 255, 255));
         for i in 0..result.video_out.len() {
             for j in 0..result.video_out[i].len() {

@@ -31,12 +31,12 @@ fn main() -> Result<(), &'static str> {
     // 1 Mhz clock
     'running: loop {
         let key_res = keyboard.handle_input();
-        match key_res {
+        let keyboard_input = match key_res {
             KeyboardInput::Quit => break 'running,
-            KeyboardInput::Other => (),
-        }
+            KeyboardInput::Input(input) => input,
+        };
         // Emu Display Logic
-        let result = cpu.cycle();
+        let result = cpu.cycle(keyboard_input);
         video_out.update(result);
         sleep(Duration::from_nanos(1000));
     }

@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::time;
 
 const FONT: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -20,15 +21,16 @@ const FONT: [u8; 80] = [
 ];
 
 pub struct Processor {
-    memory: [u8; 4096],   // 4KB of memory.
-    v: [u8; 16],          // 16 8-bit general purpose registers. V0 to VF
-    i: u16,               // 16-bit I register.
-    sound_timer: u8,      // 8-bit sound timer.
-    delay_timer: u8,      // 8-bit delay timer.
-    pc: u16,              // 16-bit program counter.
-    sp: u8,               // 16-bit stack pointer.
-    stack: [u16; 16],     // 16 16-bit value stack.
-    vram: [[u8; 64]; 32], // 64x32 pixel monitor.
+    memory: [u8; 4096],             // 4KB of memory.
+    v: [u8; 16],                    // 16 8-bit general purpose registers. V0 to VF
+    i: u16,                         // 16-bit I register.
+    sound_timer: u8,                // 8-bit sound timer.
+    delay_timer: u8,                // 8-bit delay timer.
+    pc: u16,                        // 16-bit program counter.
+    sp: u8,                         // 16-bit stack pointer.
+    stack: [u16; 16],               // 16 16-bit value stack.
+    vram: [[u8; 64]; 32],           // 64x32 pixel monitor.
+    prev_delay_tick: time::Instant, // The time at which the prev_delay_tick occured.
 }
 
 pub struct CycleResult {
@@ -51,6 +53,7 @@ impl Processor {
             sp: 0x0,
             stack: [0x0; 16],
             vram: [[0x0; 64]; 32],
+            prev_delay_tick: time::Instant::now(),
         }
     }
 
@@ -58,7 +61,17 @@ impl Processor {
         self.memory[0x200..].clone_from_slice(&cartridge[..]);
     }
 
-    pub fn cycle(&mut self) -> CycleResult {
+    pub fn cycle(&mut self, keyboard_input: [bool; 16]) -> CycleResult {
+        if self.delay_timer > 0 {
+            let now = time::Instant::now();
+            let elapsed = now - self.prev_delay_tick;
+            // decrease delay time every 1/60th of a second.
+            if elapsed.as_millis() > 16 {
+                self.delay_timer -= 1;
+                self.prev_delay_tick = now;
+            }
+        }
+
         // Fetch
         let instruction: u16 = (self.memory[self.pc as usize] as u16) << 8
             | self.memory[(self.pc + 1) as usize] as u16;
@@ -106,13 +119,13 @@ impl Processor {
                 vram_changed = inst_Dxyn(self, x as usize, y as usize, n as usize);
             }
             0xE => match nn {
-                0x9E => inst_Ex9E(self, x),
-                0xA1 => inst_ExA1(self, x),
+                0x9E => inst_Ex9E(self, x, keyboard_input),
+                0xA1 => inst_ExA1(self, x, keyboard_input),
                 _ => (),
             },
             0xF => match nn {
                 0x07 => inst_Fx07(self, x),
-                0x0A => inst_Fx0A(self, x),
+                0x0A => inst_Fx0A(self, x, keyboard_input),
                 0x15 => inst_Fx15(self, x),
                 0x18 => inst_Fx18(self, x),
                 0x1E => inst_Fx1E(self, x),
@@ -211,7 +224,8 @@ fn inst_6xkk(cpu: &mut Processor, x: u8, kk: u8) {
 /// Adds the value kk to the value of register Vx, then stores the result in Vx.
 fn inst_7xkk(cpu: &mut Processor, x: u8, kk: u8) {
     let index = x as usize;
-    cpu.v[index] = cpu.v[index] + kk;
+    let result: u16 = cpu.v[index] as u16 + kk as u16;
+    cpu.v[index] = result as u8;
 }
 
 /// 8xy0 - LD Vx, Vy
@@ -261,7 +275,7 @@ fn inst_8xy3(cpu: &mut Processor, x: u8, y: u8) {
 fn inst_8xy4(cpu: &mut Processor, x: u8, y: u8) {
     let x = x as usize;
     let y = y as usize;
-    let result: u16 = (cpu.v[x] + cpu.v[y]) as u16;
+    let result: u16 = (cpu.v[x] as u32 + cpu.v[y] as u32) as u16;
     cpu.v[0xF] = if result > 255 { 1 } else { 0 };
     cpu.v[x] = result as u8;
 }
@@ -273,7 +287,7 @@ fn inst_8xy5(cpu: &mut Processor, x: u8, y: u8) {
     let x = x as usize;
     let y = y as usize;
     cpu.v[0xF] = if cpu.v[x] > cpu.v[y] { 1 } else { 0 };
-    cpu.v[x] -= cpu.v[y];
+    cpu.v[x] = cpu.v[x].wrapping_sub(cpu.v[y]);
 }
 
 /// 8xy6 - SHR Vx {, Vy}
@@ -368,23 +382,21 @@ fn inst_Dxyn(cpu: &mut Processor, x: usize, y: usize, n: usize) -> bool {
 /// Ex9E - SKP Vx
 /// Skip next instruction if key with the value of Vx is pressed.
 /// Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
-fn inst_Ex9E(cpu: &mut Processor, x: u8) {
+fn inst_Ex9E(cpu: &mut Processor, x: u8, keyboard_input: [bool; 16]) {
     let x = x as usize;
-    // TODO
-    //if cpu.[cpu.v[x] as usize] == 0x1 {
-    //    cpu.pc += 2;
-    //}
+    if keyboard_input[cpu.v[x] as usize] {
+        cpu.pc += 2;
+    }
 }
 
 /// ExA1 - SKNP Vx
 /// Skip next instruction if key with the value of Vx is not pressed.
 /// Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
-fn inst_ExA1(cpu: &mut Processor, x: u8) {
+fn inst_ExA1(cpu: &mut Processor, x: u8, keyboard_input: [bool; 16]) {
     let x = x as usize;
-    // TODO
-    //if cpu.[cpu.v[x] as usize] != 0x1 {
-    //    cpu.pc += 2;
-    //}
+    if !keyboard_input[cpu.v[x] as usize] {
+        cpu.pc += 2;
+    }
 }
 
 /// Fx07 - LD Vx, DT
@@ -398,10 +410,16 @@ fn inst_Fx07(cpu: &mut Processor, x: u8) {
 /// Fx0A - LD Vx, K
 /// Wait for a key press, store the value of the key in Vx.
 /// All execution stops until a key is pressed, then the value of that key is stored in Vx.
-fn inst_Fx0A(cpu: &mut Processor, x: u8) {
+fn inst_Fx0A(cpu: &mut Processor, x: u8, keyboard_input: [bool; 16]) {
     let x = x as usize;
-    // TODO
-    //cpu.v[x] = cpu.delay_timer;
+    for i in 0..16 {
+        if keyboard_input[i] {
+            cpu.v[x] = i as u8;
+            return;
+        }
+    }
+    // Revert counter back to halt;
+    cpu.pc -= 2;
 }
 
 /// Fx15 - LD DT, Vx
@@ -410,6 +428,7 @@ fn inst_Fx0A(cpu: &mut Processor, x: u8) {
 fn inst_Fx15(cpu: &mut Processor, x: u8) {
     let x = x as usize;
     cpu.delay_timer = cpu.v[x];
+    cpu.prev_delay_tick = time::Instant::now();
 }
 
 /// Fx18 - LD ST, Vx
