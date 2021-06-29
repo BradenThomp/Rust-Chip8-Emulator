@@ -1,10 +1,18 @@
-## Introduction
+# Rust Chip-8 Emulator
+View a [demo here](https://www.google.com/).
+
+## About
 This is a Chip8 emulator built in rust. Chip8 is a virtual machine developed developed by Joseph Weisbecker.  You can find out more about Chip8 [Here](https://en.wikipedia.org/wiki/CHIP-8).
 
-## Demo
-
-## Requirements
+## Getting Started
+### Prerequisites
 You will need to have sdl2 for rust installed which can be found [Here](https://github.com/Rust-SDL2/rust-sdl2).
+
+### Installation
+Clone the repo:
+```bash
+git clone https://github.com/BradenThomp/Rust-Chip8-Emulator.git
+```
 
 ## Usage 
 Clone this repository and then run
