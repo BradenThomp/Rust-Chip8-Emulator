@@ -15,5 +15,5 @@ ROMs can be found [Here](https://github.com/kripod/chip8-roms).
 
 ## Resources
 The following resources were used to create this chip8 emulator.
-*[write-a-chip-8-emulator](https://tobiasvl.github.io/blog/write-a-chip-8-emulator/)
-*[Cowgod's Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
+* [write-a-chip-8-emulator](https://tobiasvl.github.io/blog/write-a-chip-8-emulator/)
+* [Cowgod's Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
