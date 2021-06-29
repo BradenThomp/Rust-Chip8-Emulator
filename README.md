@@ -15,7 +15,7 @@ git clone https://github.com/BradenThomp/Rust-Chip8-Emulator.git
 ```
 
 ## Usage 
-Clone this repository and then run
+At the root directory of the repository run:
 ```bash 
 cargo run "ROM path"
 ```
