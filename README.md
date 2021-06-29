@@ -8,9 +8,9 @@ You will need to have sdl2 for rust installed which can be found [Here](https://
 
 ## Usage 
 Clone this repository and then run
-'''bash 
+```bash 
 cargo run "ROM path"
-'''
+```
 ROMs can be found [Here](https://github.com/kripod/chip8-roms).
 
 ## Resources
